@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<!-- Copyright 2025 Lunch Pail Labs, LLC. Licensed under Apache-2.0.
+     Adapted from PailFlow: room URL and guest token are scoped by the server. -->
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Join Meeting - PailFlow</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        brand: '#1f2de6', // Core brand color
+                        brandDark: '#141db8',
+                        slate: {
+                            850: '#1e293b', // Custom dark slate
+                        }
+                    },
+                    animation: {
+                        'fade-in': 'fadeIn 0.4s ease-out',
+                        'pulse-subtle': 'pulseSubtle 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+                    },
+                    keyframes: {
+                        fadeIn: {
+                            '0%': { opacity: '0' },
+                            '100%': { opacity: '1' },
+                        },
+                        pulseSubtle: {
+                            '0%, 100%': { opacity: '1' },
+                            '50%': { opacity: '0.7' },
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['Inter', '-apple-system', 'BlinkMacSystemFont', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+    <script crossorigin src="https://unpkg.com/@daily-co/daily-js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+        * { box-sizing: border-box; }
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 100vw;
+            height: 100%;
+            overflow: hidden;
+        }
+        body {
+            background-color: #ffffff;
+        }
+
+        /* Loader Animation - Flat Design */
+        .loader-dots {
+            display: flex;
+            gap: 8px;
+        }
+        .loader-dot {
+            width: 12px;
+            height: 12px;
+            background-color: #1f2de6;
+            border-radius: 50%;
+            animation: bounce 1.4s infinite ease-in-out both;
+        }
+        .loader-dot:nth-child(1) { animation-delay: -0.32s; }
+        .loader-dot:nth-child(2) { animation-delay: -0.16s; }
+
+        @keyframes bounce {
+            0%, 80%, 100% { transform: scale(0); }
+            40% { transform: scale(1); }
+        }
+    </style>
+</head>
+<body class="flex flex-col h-screen text-slate-900 bg-white">
+
+    <!-- Top Brand Line -->
+    <div class="h-1 w-full bg-brand z-50"></div>
+
+    <!-- Flat Clean Header -->
+    <header class="bg-white border-b border-slate-200 h-[72px] flex items-center justify-between px-6 z-40">
+        <div class="flex items-center gap-4">
+            <!-- Minimalist Logo -->
+            <div class="flex items-center gap-3 group cursor-default">
+                <div class="w-8 h-8 bg-brand rounded flex items-center justify-center transition-transform group-hover:scale-105">
+                     <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                    </svg>
+                </div>
+                <div class="flex flex-col justify-center">
+                    <span id="logo-text" class="font-bold text-lg leading-none tracking-tight text-slate-900">PailFlow</span>
+                    <span class="text-[10px] font-semibold text-slate-400 tracking-widest uppercase mt-0.5">Workspace</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Clean Status Badge -->
+        <div class="hidden sm:flex items-center bg-slate-50 border border-slate-200 rounded-full px-3 py-1.5 gap-2">
+            <div class="relative flex h-2.5 w-2.5">
+              <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+            </div>
+            <span class="text-xs font-semibold text-slate-600">System Ready</span>
+        </div>
+    </header>
+
+    <!-- Main Content Area -->
+    <main class="flex-1 relative w-full h-full bg-white">
+
+        <!-- Loading State (Clean/Flat) -->
+        <div id="loading" class="absolute inset-0 flex flex-col items-center justify-center z-10 bg-white transition-opacity duration-500">
+            <div class="loader-dots mb-8">
+                <div class="loader-dot"></div>
+                <div class="loader-dot"></div>
+                <div class="loader-dot"></div>
+            </div>
+            <h2 class="text-xl font-semibold text-slate-900">Joining Meeting</h2>
+            <p class="text-slate-500 mt-2 text-sm">Establishing secure connection...</p>
+        </div>
+
+        <!-- Error State -->
+        <div id="error" class="hidden absolute inset-0 z-20 flex flex-col items-center justify-center bg-white p-8">
+            <div class="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mb-4">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+            </div>
+            <h3 class="text-lg font-bold text-slate-900 mb-2">Connection Failed</h3>
+            <p id="error-message" class="text-slate-500 text-center max-w-md mb-6">We couldn't connect you to the room.</p>
+            <button onclick="window.location.reload()" class="px-6 py-2.5 bg-slate-900 text-white rounded-md text-sm font-medium hover:bg-slate-800 transition-colors">
+                Reload Page
+            </button>
+        </div>
+
+        <!-- Daily Frame Container -->
+        <div id="daily-frame" class="w-full h-full opacity-0 transition-opacity duration-700"></div>
+    </main>
+
+    <script>
+        const DAILY_DOMAIN = null; // Will be replaced by server
+        const urlParams = new URLSearchParams(window.location.search);
+
+        // Simple Explanation: We now accept room_url directly from URL parameters
+        // This allows joining any existing Daily room without needing to create it first
+        const roomUrl = __ROOM_URL__;
+        const meetingToken = __GUEST_TOKEN__;
+
+        // Fallback: Try to get room name from path (for backwards compatibility)
+        const roomName = window.location.pathname.split('/').pop();
+
+        const theme = urlParams.get('theme') || 'light';
+        const accentColor = urlParams.get('accentColor') || '#1f2de6'; // Brand Blue
+        const logoText = urlParams.get('logoText') || 'PailFlow';
+
+        // Auto-start configuration from URL parameters
+        const autoRecord = urlParams.get('autoRecord') === 'true';
+        const autoTranscribe = urlParams.get('autoTranscribe') === 'true';
+
+        // UI Setup
+        if (logoText) {
+            document.getElementById('logo-text').textContent = logoText;
+        }
+
+        // Simple Explanation: We now support two ways to join a room:
+        // 1. Direct room_url parameter (preferred): ?room_url=https://domain.daily.co/room-name
+        // 2. Room name from path (backwards compatible): /meet/room-name
+        let finalRoomUrl = null;
+
+        if (roomUrl) {
+            // Use room_url from URL parameter (new simplified way)
+            finalRoomUrl = roomUrl;
+        } else if (roomName && DAILY_DOMAIN) {
+            // Fallback: Construct room URL from room name and Daily domain (backwards compatible)
+            finalRoomUrl = `${DAILY_DOMAIN}/${roomName}`;
+        }
+
+        if (!finalRoomUrl) {
+            const loadingEl = document.getElementById('loading');
+            const errorEl = document.getElementById('error');
+            const errorMsg = document.getElementById('error-message');
+
+            loadingEl.style.opacity = '0';
+            setTimeout(() => {
+                loadingEl.style.display = 'none';
+                errorMsg.textContent = !roomUrl && !DAILY_DOMAIN
+                    ? 'Server configuration error: DAILY_DOMAIN not set and no room_url provided.'
+                    : 'Room URL not found. Provide ?room_url=https://domain.daily.co/room-name in URL.';
+                errorEl.classList.remove('hidden');
+                errorEl.classList.add('flex');
+            }, 500);
+        } else {
+
+            window.addEventListener('load', async () => {
+                const container = document.getElementById('daily-frame');
+                const loadingEl = document.getElementById('loading');
+                const errorEl = document.getElementById('error');
+                const errorMsg = document.getElementById('error-message');
+
+                try {
+                    const dailyFrame = window.Daily.createFrame(container, {
+                        activeSpeakerMode: false,
+                        showLeaveButton: true,
+                        iframeStyle: {
+                            width: '100%',
+                            height: '100%',
+                            border: 'none',
+                        },
+                        // --- Custom Daily Theme for Native Look (FIXED) ---
+                        theme: {
+                            colors: {
+                                // Primary color for interactive elements (buttons, highlights)
+                                accent: accentColor, // Brand Blue: #1f2de6
+                                accentText: '#ffffff', // White text on accent background
+
+                                // Background for the control bar (the main area controls)
+                                mainAreaBg: '#ffffff',
+                                // Text color on the control bar/UI (Dark Slate for contrast)
+                                mainAreaText: '#1e293b',
+
+                                mainAreaBgAccent: '#ffffff',
+
+
+
+                                // General text and background colors
+                                background: '#ffffff', // Pure white
+                                baseText: '#334155', // Standard Slate 700 for readability
+
+                                // Border colors for buttons and elements
+                                border: '#e2e8f0', // Standard Slate 200
+                            }
+                        },
+                        // --- End Custom Daily Theme ---
+                    });
+
+                    // Event Handlers
+                    dailyFrame.on('loaded', () => {
+                        loadingEl.style.opacity = '0';
+                        setTimeout(() => {
+                            loadingEl.style.display = 'none';
+                            container.classList.remove('opacity-0');
+                        }, 500);
+                    });
+
+                    dailyFrame.on('error', (error) => {
+                        console.error('Daily Error:', error);
+                        loadingEl.style.opacity = '0';
+                        setTimeout(() => {
+                            loadingEl.style.display = 'none';
+                            errorMsg.textContent = error?.errorMsg || 'Failed to join meeting room.';
+                            errorEl.classList.remove('hidden');
+                            errorEl.classList.add('flex');
+                        }, 500);
+                    });
+
+                    dailyFrame.on('left-meeting', () => {
+                         console.log('User left meeting');
+                    });
+
+                    dailyFrame.on('recording-started', () => console.log('Recording started'));
+                    dailyFrame.on('recording-stopped', () => console.log('Recording stopped'));
+                    dailyFrame.on('recording-error', (error) => console.error('Recording error:', error));
+
+                    dailyFrame.on('transcription-started', () => console.log('Transcription started'));
+                    dailyFrame.on('transcription-stopped', () => console.log('Transcription stopped'));
+                    dailyFrame.on('transcription-error', (error) => console.error('Transcription error:', error));
+
+                    async function startFeature(featureName, startFn) {
+                        try {
+                            await startFn();
+                            console.log(`${featureName} started`);
+                        } catch (error) {
+                            const msg = error?.message || error?.error || '';
+                            if (!msg.includes('already started') && !msg.includes('not enabled')) {
+                                console.error(`Failed to start ${featureName}:`, error);
+                            }
+                        }
+                    }
+
+                    if (autoRecord || autoTranscribe) {
+                        dailyFrame.on('joined-meeting', async () => {
+                            if (autoRecord) startFeature('recording', () => dailyFrame.startRecording());
+                            if (autoTranscribe) startFeature('transcription', () => dailyFrame.startTranscription());
+                        });
+                    }
+
+                    // Simple Explanation: Join the room using the room URL
+                    // If a token was provided in the URL, use it for authentication
+                    const joinOptions = { url: finalRoomUrl };
+                    if (meetingToken) {
+                        joinOptions.token = meetingToken;
+                    }
+
+                    await dailyFrame.join(joinOptions);
+
+                } catch (err) {
+                    console.error("Initialization Error:", err);
+                    loadingEl.style.opacity = '0';
+                    setTimeout(() => {
+                        loadingEl.style.display = 'none';
+                        errorMsg.textContent = "Could not initialize video frame.";
+                        errorEl.classList.remove('hidden');
+                        errorEl.classList.add('flex');
+                    }, 500);
+                }
+            });
+        }
+    </script>
+</body>
+</html>
