@@ -12,11 +12,13 @@ Send an interview prompt and an analysis prompt. Interview Agent creates a priva
 
 If it is useful, star the repo so more people can find it.
 
-## Pipa Managed
+## Interested in a hosted interview API?
 
-Want help configuring and running agent workflows for your company? Check out [Pipa Managed](https://usepipa.com/managed). We set up an operations agent around how your team works, then keep its workflows running and improving over time.
+Want to use this interview API without running the service yourself? We're gathering interest in a hosted version.
 
-For an interview-specific deployment or custom application integration, tell us what you need so we can scope the setup with you. This repository remains the do-it-yourself option; Managed is not a drop-in hosted version of this API.
+Email [help@lunchpaillabs.com](mailto:help@lunchpaillabs.com?subject=Hosted%20interview%20API%20interest) with what you're building, your expected interview volume, and when you'd want to start. Those details help us assess whether it's a fit.
+
+This is an expression of interest, not a hosted signup or availability commitment. Please use this email for hosted API inquiries, not self-hosted installation support.
 
 ## What you can do
 
