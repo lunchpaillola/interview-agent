@@ -1,54 +1,102 @@
-# interview-agent
-Experimental, self-hosted AI interview and meeting bot. Bring your own provider accounts; no hosted service or support commitment.
+# Interview Agent
 
-A small Python HTTP service that creates a private Daily room, runs a Pipecat voice interviewer, collects the conversation, and analyzes it with your prompt. Optional results email uses Resend. The styled meeting page and talking sprite animation are preserved from PailFlow.
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
-## Run locally
+Run an AI interview from one API request, using your own provider keys.
 
-Requires Python 3.12, `uv`, and provider accounts. No database, Docker, or managed runtime is required.
+Send an interview prompt and an analysis prompt. Interview Agent creates a private Daily room, returns a shareable meeting page, and runs the conversation with an animated voice agent. When the call ends, retrieve the transcript and analysis or receive a summary by email.
+
+[Watch the original workflow demo](https://www.youtube.com/watch?v=Oy98s9RcscY) · [View on GitHub](https://github.com/lunchpaillola/interview-agent)
+
+**This is an experimental self-hosted extraction of the PailFlow interview workflow, not a hosted API. Features may break. You run the service, bring your own provider accounts, and own hosting, persistence, and application integration.**
+
+If it is useful, star the repo so more people can find it.
+
+## Pipa Managed
+
+Want help configuring and running agent workflows for your company? Check out [Pipa Managed](https://usepipa.com/managed). We set up an operations agent around how your team works, then keep its workflows running and improving over time.
+
+For an interview-specific deployment or custom application integration, tell us what you need so we can scope the setup with you. This repository remains the do-it-yourself option; Managed is not a drop-in hosted version of this API.
+
+## What you can do
+
+- **Start an interview by API.** Define how the interviewer behaves and what the analysis should produce.
+- **Share or embed the meeting page.** The styled Daily call UI and animated agent are included.
+- **Run overlapping interviews.** Each call has its own room, conversation, transcript, and result.
+- **Get the outcome.** Read the transcript and structured analysis through the API, with optional Resend email delivery.
+
+No external database, Docker setup, or managed runtime is required. State stays in memory while the service runs.
+
+## Quick start
+
+### Requirements
+
+- Python 3.12 and `uv`
+- Daily, OpenAI, and Deepgram accounts with API access
+- A Resend account and verified sender domain if you want email delivery
+
+Provider usage is billed to your accounts. This version supports Daily rooms, not Zoom, Google Meet, or Teams.
+
+### 1. Install
 
 ```sh
+git clone https://github.com/lunchpaillola/interview-agent.git
+cd interview-agent
 uv venv --python python3.12 .venv
 uv pip install --python .venv/bin/python -r requirements.txt
-cp .env.example .env  # only on first setup; never overwrite an existing .env
+cp -n .env.example .env
 ```
 
-Set these server-only values in `.env`:
+The copy command leaves an existing `.env` untouched. Keep real credentials in that ignored file, never in committed source or browser code.
 
-- `API_AUTH_TOKEN`: a strong, random shared bearer token. Required; startup fails without it.
-- `DAILY_API_KEY`, `OPENAI_API_KEY`, `DEEPGRAM_API_KEY`: required.
-- `PUBLIC_BASE_URL`: the public HTTPS address of this service, with no trailing slash. Defaults to `http://localhost:8000` for local use. For remote participants configure your own HTTPS reverse proxy or tunnel before creating interviews.
-- `RESEND_API_KEY`, `RESEND_EMAIL_DOMAIN`: required only when requesting email. The domain must be verified with Resend; send-only API keys are sufficient. Mail comes from `noreply@<domain>`.
+### 2. Configure
+
+Fill in `.env`:
+
+| Variable | Purpose |
+| --- | --- |
+| `DAILY_API_KEY` | Create private rooms and meeting tokens. |
+| `OPENAI_API_KEY` | Conversation, speech generation, and post-call analysis. |
+| `DEEPGRAM_API_KEY` | Speech recognition. |
+| `API_AUTH_TOKEN` | Your own strong, random shared token for the interview API. Required at startup. |
+| `PUBLIC_BASE_URL` | Public HTTPS address of your service, without a trailing slash. Defaults to `http://localhost:8000`. |
+| `RESEND_API_KEY` | Optional email delivery. A send-only key is sufficient. |
+| `RESEND_EMAIL_DOMAIN` | Optional email delivery. Must be verified in Resend; mail comes from `noreply@<domain>`. |
+| `TEST_EMAIL_TO` | Optional test mailbox for your own checks; not a default API recipient. |
+
+You can generate a local API token with:
+
+```sh
+python3 -c 'import secrets; print(secrets.token_urlsafe(32))'
+```
+
+For remote participants, configure your own HTTPS reverse proxy or tunnel and set `PUBLIC_BASE_URL` **before creating interviews**. The root URL has no dashboard; the API returns the meeting-page link.
+
+### 3. Start the service
 
 ```sh
 .venv/bin/uvicorn interview_agent.app:create_app --factory --host 127.0.0.1 --port 8000 --workers 1 --no-access-log
 ```
 
-**Use exactly one worker process and no reload mode.** Every interview, task, transcript, and result lives in that process's memory. Multiple simultaneous and repeated interviews are supported, but multiple worker processes do not share state. Restarting loses all state and invalidates meeting pages. Initial imports/model loading can take a little time. Local Silero VAD and Smart Turn v3 use bundled ONNX models, not PyTorch.
+Keep this process running. **Use exactly one worker and no reload mode.** Initial imports and model loading can take a little time.
 
-Do not expose the repository directory with a file server. This application serves only the explicit `/meet/{id}` HTML route; sprites are loaded internally by the bot and sent as video. Provider credentials and the shared API token never enter the browser.
+### 4. Create an interview
 
-## API
+In a second terminal, set `API_AUTH_TOKEN` to the same value you saved in `.env`, then make a request:
 
-All `/interviews` routes require `Authorization: Bearer <API_AUTH_TOKEN>`. Use a trusted server-side client, not browser JavaScript containing the shared token. No user accounts or tenant isolation are provided: the shared token controls all interviews.
+```sh
+export API_AUTH_TOKEN='the-same-token-you-put-in-.env'
 
-### Create
-
-`POST /interviews`, JSON:
-
-```json
-{
-  "interview_prompt": "Interview the participant about their onboarding experience. Ask one question at a time.",
-  "analysis_prompt": "Return JSON with summary, strengths, and weaknesses. Transcript: {transcript}",
-  "bot_name": "PailBot",
-  "greeting": "Explain that this is a short feedback interview.",
-  "email_recipient": "participant@example.com"
-}
+curl --fail-with-body http://localhost:8000/interviews \
+  -H "Authorization: Bearer $API_AUTH_TOKEN" \
+  -H 'Content-Type: application/json' \
+  --data '{
+    "interview_prompt": "Interview the participant about a project they led. Ask one question at a time.",
+    "analysis_prompt": "Return JSON with summary, strengths, and follow_up_questions. Transcript: {transcript}"
+  }'
 ```
 
-Only the two prompts are required. Omit `email_recipient` to skip email. Analysis supports `{transcript}` and `{qa_text}` placeholders; otherwise the complete role-labeled transcript is appended. Analysis always returns a JSON object, preserving custom requested fields.
-
-Returns HTTP 201 after Daily room/token creation, without waiting for the call or analysis:
+The service returns HTTP 201 after creating the room and tokens. It does not wait for the interview to finish:
 
 ```json
 {
@@ -58,11 +106,18 @@ Returns HTTP 201 after Daily room/token creation, without waiting for the call o
 }
 ```
 
-Share `ui_url` for the styled meeting experience. `meeting_url` is the direct Daily alternative. Both are room-specific bearer capabilities: anyone holding either link can join that interview. Do not publish them or log their query strings. Configure proxies to omit/redact query strings, too. The page uses `no-store` and `no-referrer`, but loads the existing Daily JS, Tailwind, and Google Fonts assets from external CDNs. The browser never receives the bot's separate token. The room is private, limited to two participants (bot plus interviewee), and guest tokens are not room owners/admins.
+Open `ui_url` to join the styled meeting page. The agent greets you when you join. `meeting_url` is the direct Daily alternative.
 
-### Read status and results
+### 5. Read the result
 
-`GET /interviews/{interview_id}` returns:
+Use the returned `interview_id`:
+
+```sh
+curl --fail-with-body http://localhost:8000/interviews/INTERVIEW_ID \
+  -H "Authorization: Bearer $API_AUTH_TOKEN"
+```
+
+After the participant leaves and analysis finishes, the response looks like:
 
 ```json
 {
@@ -74,27 +129,99 @@ Share `ui_url` for the styled meeting experience. `meeting_url` is the direct Da
 }
 ```
 
-Statuses: `starting`, `waiting`, `active`, `analyzing`, `completed`, `failed`, or `stopped` (shutdown cancellation). Transcript/results are only on this protected route, never on the public meeting page. Email failure is reported in `result.email_error` without discarding analysis. Empty calls complete without an analysis or email. Failed analysis leaves the collected transcript available. The service does not reschedule failed interviews or resend failed email; voice-provider SDKs may perform their own connection/request retries.
+## Customize the interview
 
-### Stop
+Only `interview_prompt` and `analysis_prompt` are required. The create request also accepts:
 
-`POST /interviews/{interview_id}/stop` requests a stop, returning immediately. The bot leaves, analyzes its captured transcript, and optionally emails results; poll the status route for completion. Repeated stop requests are safe. The bot also stops when the interviewee leaves, after five minutes with no participant or speech activity, or after thirty minutes total. Daily tokens/room expire and eject participants after one hour as an independent orphan-bot backstop. Rooms are deleted after processing; failed cleanup is visible in the status error.
+```json
+{
+  "interview_prompt": "Interview the participant about their onboarding experience. Ask one question at a time.",
+  "analysis_prompt": "Return JSON with summary, strengths, and weaknesses. Transcript: {transcript}",
+  "bot_name": "PailBot",
+  "greeting": "Explain that this is a short feedback interview.",
+  "email_recipient": "participant@example.com"
+}
+```
 
-SIGINT/SIGTERM is owned by Uvicorn, not individual Pipecat runners. Shutdown signals each interview to stop, waits up to 30 seconds, then cancels remaining tasks while allowing transport cleanup and Daily renderer settling. Avoid SIGKILL, which cannot clean up gracefully; Daily expiry remains the backstop.
+- `bot_name` and `greeting` customize the introduction.
+- Analysis supports `{transcript}` and `{qa_text}` placeholders. Otherwise, the complete role-labeled transcript is appended to your prompt. Analysis returns a JSON object with the fields requested by your prompt.
+- Add `email_recipient` to send the summary and transcript through Resend. Omit it to skip email.
+- Email failure appears in `result.email_error` without discarding analysis. Failed analysis leaves the collected transcript available. Empty calls complete without analysis or email.
 
-## Checks
+### Embed the meeting page
+
+Create the interview from your trusted backend, then use its returned `ui_url` as the iframe source:
+
+```html
+<iframe
+  src="RETURNED_UI_URL"
+  title="AI interview"
+  allow="camera; microphone; autoplay; fullscreen"
+  style="width: 100%; height: 720px; border: 0;"
+></iframe>
+```
+
+Use HTTPS for remote microphone/camera access. Do not put the shared API token or provider keys in frontend JavaScript. Your application handles creating interviews and retrieving results through its backend.
+
+## API reference
+
+All `/interviews` routes require `Authorization: Bearer <API_AUTH_TOKEN>`.
+
+| Method | Route | Behavior |
+| --- | --- | --- |
+| `POST` | `/interviews` | Create a private room and start an interview. |
+| `GET` | `/interviews/{interview_id}` | Read status, transcript, analysis, and email outcome. |
+| `POST` | `/interviews/{interview_id}/stop` | Request a stop, then process the captured transcript. |
+| `GET` | `/meet/{interview_id}?cap=...` | Open the room-scoped meeting page. |
+
+Statuses are `starting`, `waiting`, `active`, `analyzing`, `completed`, `failed`, or `stopped` (shutdown cancellation).
+
+Stop requests return immediately and are safe to repeat. Poll the status route until processing finishes:
+
+```sh
+curl --fail-with-body -X POST http://localhost:8000/interviews/INTERVIEW_ID/stop \
+  -H "Authorization: Bearer $API_AUTH_TOKEN"
+```
+
+## Operation and limits
+
+- **Memory only.** Restarting loses interviews, transcripts, and results and invalidates meeting pages. Multiple worker processes do not share state.
+- **Concurrent, not unlimited.** Calls can overlap, subject to CPU, memory, and provider limits. You own scaling and durable storage.
+- **Bounded calls.** The bot stops when the interviewee leaves, after five minutes with no participant or speech activity, or after thirty minutes total.
+- **Room cleanup.** Rooms are deleted after processing. Failed cleanup is visible in the status error. Daily rooms/tokens expire and eject participants after one hour as an independent orphan-bot backstop.
+- **No durable orchestration.** The service does not reschedule failed interviews or resend failed email. Voice-provider SDKs may perform their own connection/request retries.
+- **Graceful shutdown.** Uvicorn owns SIGINT/SIGTERM. Shutdown signals each interview to stop, waits up to 30 seconds, then cancels remaining tasks while allowing transport cleanup and Daily renderer settling. Avoid SIGKILL, which cannot clean up gracefully.
+- **No automatic recording.** Calls do not start recordings or Daily server-side transcription by default.
+
+### Access and privacy
+
+The shared API token controls **all** interviews. No user accounts or tenant isolation are provided. Call protected endpoints from a trusted server-side client.
+
+Both returned meeting links grant access to one interview: anyone holding either link can join. Do not publish them or log their query strings; configure proxies to omit or redact those strings too. Rooms are private and limited to the bot plus one interviewee. Guest tokens are not room owners/admins, and the browser never receives the bot's separate token.
+
+Transcripts and results are available only through the protected API, not the public meeting page. The page uses `no-store` and `no-referrer`, but loads Daily JS, Tailwind, and Google Fonts assets from external CDNs.
+
+Do not expose the repository directory with a file server. The application serves only the explicit meeting HTML route. Sprites are loaded internally by the bot and sent as video. Provider credentials and the shared API token stay on the server.
+
+## Development
 
 ```sh
 .venv/bin/python -m unittest discover -s tests -v
 uv pip check --python .venv/bin/python
 ```
 
-Tests use in-process HTTP and fake provider transports. They do not spend provider credits or send email. Live browser/audio and delivery testing must be done separately with provider credentials.
+Tests use in-process HTTP and fake provider transports. They do not spend provider credits or send email. Live browser/audio and delivery checks require provider credentials and must be run separately.
 
-## Extraction boundaries
+### Under the hood
 
-Preserved: Deepgram Nova-2 transcription with diarization, OpenAI `gpt-4.1` conversation/analysis, OpenAI `echo` speech, Silero VAD (0.5-second stop), minimum-three-word turn starts, local Smart Turn v3 stops (60-second timeout), greeting on first participant, aggregator-based user/assistant transcripts, existing meeting layout/themes, RGB forward/reverse talking sprites, and Daily cleanup/renderer settling.
+The voice pipeline uses Daily transport, Deepgram Nova-2 transcription with diarization, OpenAI `gpt-4.1` conversation/analysis, and OpenAI `echo` speech. Turn detection uses Silero VAD (0.5-second stop), minimum-three-word turn starts, and local Smart Turn v3 stops (60-second timeout). The local models use bundled ONNX files, not PyTorch.
 
-Removed: workflow checkpoints, database writes, billing/usage tracking, PostHog, accounts, webhooks, and managed infrastructure. Transcripts use user/assistant roles rather than workflow-specific speaker mapping. Full transcript analysis replaces the old filtered Q&A conversion, so short answers are retained. Context truncation/summarization is not included; keep interview prompts and conversations reasonably sized within the bounded session. Email uses a small escaped summary/transcript layout rather than the workflow's candidate-specific template. No recordings or Daily server-side transcription are started by default.
+This extraction preserves the first-participant greeting, aggregator-based transcripts, meeting layout/themes, forward/reverse RGB talking sprites, and Daily cleanup/renderer settling. It leaves out workflow checkpoints, database writes, billing/usage tracking, PostHog, accounts, webhooks, and managed infrastructure.
 
-Copyright 2025 Lunch Pail Labs, LLC. Licensed under Apache-2.0; see [LICENSE](LICENSE). Adapted Python code, meeting page, and sprites originate in PailFlow.
+Transcripts use user/assistant roles rather than workflow-specific speaker mapping. Full-transcript analysis replaces filtered Q&A conversion, so short answers are retained. Context truncation/summarization is not included; keep prompts and conversations reasonably sized within the bounded session. Email uses a small escaped summary/transcript layout rather than the original candidate-specific template.
+
+## License
+
+Licensed under the [Apache License 2.0](LICENSE).
+
+Copyright 2025 Lunch Pail Labs, LLC. Adapted Python code, meeting page, and sprites originate in PailFlow.
